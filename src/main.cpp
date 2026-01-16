@@ -48,10 +48,7 @@ void setup() {
 }
 
 void loop() {
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, 200);
-  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, 200);
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, 200);
-  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, 200);
+  moveForward(128);
   delay(2000);
 }
 
