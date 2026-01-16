@@ -1,20 +1,23 @@
 #include <Arduino.h>  //DIR1 = INA  DIR2 = INB
 // Roda frontal esquerda
-#define RFE_DIR1 2
-#define RFE_DIR2 3
+#define RFE_DIR1 22
+#define RFE_DIR2 23
 #define RFE_PWM 5
 // Roda frontal direita
-#define RFD_DIR1 4
-#define RFD_DIR2 7
+#define RFD_DIR1 24
+#define RFD_DIR2 25
 #define RFD_PWM 6
 // Roda traseira esquerda
-#define RTE_DIR1 8
-#define RTE_DIR2 9
-#define RTE_PWM 10
+#define RTE_DIR1 26
+#define RTE_DIR2 27
+#define RTE_PWM 9
 // Roda traseira direita
-#define RTD_DIR1 12
-#define RTD_DIR2 13
-#define RTD_PWM 11
+#define RTD_DIR1 28
+#define RTD_DIR2 29
+#define RTD_PWM 10
+// Encoder roda frontal esquerda
+#define EFE_A 2
+#define EFE_B 3
 
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
