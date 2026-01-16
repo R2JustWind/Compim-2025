@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include <Arduino.h>  //DIR1 = INA  DIR2 = INB
 // Roda frontal esquerda
 #define RFE_DIR1 2
 #define RFE_DIR2 3
