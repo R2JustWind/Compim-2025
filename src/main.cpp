@@ -1,4 +1,5 @@
-#include <Arduino.h>  //DIR1 = INA  DIR2 = INB
+#include <Arduino.h> 
+//DIR1 = INA  DIR2 = INB
 // Roda frontal esquerda
 #define RFE_DIR1 22
 #define RFE_DIR2 23
@@ -48,8 +49,7 @@ void setup() {
 }
 
 void loop() {
-  moveForward(128);
-  delay(2000);
+  
 }
 
 void setMotor(int dir1, int dir2, int pwm, int speed) {
