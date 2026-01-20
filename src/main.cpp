@@ -18,8 +18,20 @@
 #define RTE_PWM 13
 // Encoder roda frontal esquerda
 #define EFE_A 2
-#define EFE_B 3  
+#define EFE_B 3
 
+// Sensores IR
+#define IR_E A0 // Esquerdo
+#define IR_C A1 // Centro
+#define IR_D A2 // Direito
+
+#define THRESHOLD 500 // Limiar para detecção de linha
+// THRESHOLD = (preto + branco) / 2;
+
+#define BASE_SPEED 120 // Velocidade base
+#define CORRECTION 60 // Correção lateral (metade da velocidade base)
+
+int readLine(int pin);
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
 void moveForward(int speed);
@@ -31,6 +43,9 @@ void turnRight(int speed);
 void stop();
 
 void setup() {
+  Serial.begin(9600);
+
+  // Motores
   pinMode(RFE_DIR1, OUTPUT);
   pinMode(RFE_DIR2, OUTPUT);
   pinMode(RFE_PWM, OUTPUT);
@@ -46,23 +61,38 @@ void setup() {
   pinMode(RTD_DIR1, OUTPUT);
   pinMode(RTD_DIR2, OUTPUT);
   pinMode(RTD_PWM, OUTPUT);
+
+  // Sensores IR
+  pinMode(IR_E, INPUT);
+  pinMode(IR_C, INPUT);
+  pinMode(IR_D, INPUT);
 }
 
 void loop() {
-  moveForward(50);
-  delay(3000);
-  moveBackward(50);
-  delay(3000);
-  moveLeft(50);
-  delay(3000);
-  moveRight(50);
-  delay(3000);
-  turnLeft(50);
-  delay(3000);
-  turnRight(50);
-  delay(3000);
-  stop();
-  delay(3000);
+  // Sensores IR de teste
+  int sE = readLine(IR_E); //Sensor esquerdo
+  int sC = readLine(IR_C); //Sensor centro
+  int sD = readLine(IR_D); //Sensor direito
+
+  
+
+  Serial.print("E: ");
+  Serial.println(analogRead(IR_E));
+  Serial.print(" C: ");
+  Serial.println(analogRead(IR_C));
+  Serial.print(" D: ");
+  Serial.println(analogRead(IR_D));
+  delay(1000);
+}
+
+int readLine(int pin) {
+  int value = analogRead(pin);
+
+  if (value < THRESHOLD) {
+    return 0;   // linha amarela (preto)
+  } else {
+    return 1;   // fundo cinza (branco)
+  }
 }
 
 void setMotor(int dir1, int dir2, int pwm, int speed) {
