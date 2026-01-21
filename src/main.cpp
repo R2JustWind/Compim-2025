@@ -25,11 +25,12 @@
 #define IR_C A1 // Centro
 #define IR_D A2 // Direito
 
-#define THRESHOLD 500 // Limiar para detecção de linha
+#define THRESHOLD 90 // Limiar para detecção de linha
+#define THRESHOLD_CENTER 40
 // THRESHOLD = (preto + branco) / 2;
 
-#define BASE_SPEED 120 // Velocidade base
-#define CORRECTION 60 // Correção lateral (metade da velocidade base)
+#define BASE_SPEED 35 // Velocidade base
+#define CORRECTION 35 // Correção lateral (metade da velocidade base)
 
 int readLine(int pin);
 
@@ -74,7 +75,29 @@ void loop() {
   int sC = readLine(IR_C); //Sensor centro
   int sD = readLine(IR_D); //Sensor direito
 
-  
+  // Linha no centro → segue reto
+  if (sC == HIGH && sE == LOW && sD == LOW) {
+    moveForward(BASE_SPEED);
+  }
+  // Linha puxando para esquerda → corrige esquerda
+  else if (sE == HIGH && sC == LOW && sD == LOW) {
+    moveLeft(CORRECTION);
+  }
+  // Linha puxando para direita → corrige direita
+  else if (sD == HIGH && sC == LOW && sE == LOW) {
+    moveRight(CORRECTION);
+  }
+  // Centro + lado → curva suave
+  else if (sE == HIGH && sC == HIGH && sD == LOW) {
+    turnLeft(CORRECTION);
+  }
+  else if (sD == HIGH && sC == HIGH && sE == LOW) {
+    turnRight(CORRECTION);
+  }
+  // Linha perdida
+  else if (sE == LOW && sC == LOW && sD == LOW) {
+    stop();
+  }
 
   Serial.print("E: ");
   Serial.println(analogRead(IR_E));
@@ -82,17 +105,24 @@ void loop() {
   Serial.println(analogRead(IR_C));
   Serial.print(" D: ");
   Serial.println(analogRead(IR_D));
-  delay(1000);
 }
 
 int readLine(int pin) {
   int value = analogRead(pin);
 
-  if (value < THRESHOLD) {
-    return 0;   // linha amarela (preto)
+  if(pin == IR_C) {
+    if (value > THRESHOLD_CENTER) {
+      return 1;   // linha amarela (preto)
+    } else {
+      return 0;   // fundo cinza (branco)
+    }
   } else {
-    return 1;   // fundo cinza (branco)
-  }
+    if (value > THRESHOLD) {
+        return 1;   // linha amarela (preto)
+      } else {
+        return 0;   // fundo cinza (branco)
+      }
+    }
 }
 
 void setMotor(int dir1, int dir2, int pwm, int speed) {
