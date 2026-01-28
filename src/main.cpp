@@ -9,12 +9,12 @@
 #define RFE_DIR2 25
 #define RFE_PWM 7
 // Driver2A - Roda traseira direita - M3
-#define RTD_DIR1 28
-#define RTD_DIR2 29
+#define RTD_DIR1 53
+#define RTD_DIR2 52
 #define RTD_PWM 10
 // Driver2B - Roda traseira esquerda - M4
-#define RTE_DIR1 26
-#define RTE_DIR2 27 
+#define RTE_DIR1 51
+#define RTE_DIR2 50
 #define RTE_PWM 13
 // Encoder roda frontal esquerda
 #define EFE_A 2
@@ -29,7 +29,7 @@
 #define THRESHOLD_CENTER 40
 // THRESHOLD = (preto + branco) / 2;
 
-#define BASE_SPEED 35 // Velocidade base
+#define BASE_SPEED 45 // Velocidade base
 #define CORRECTION 35 // Correção lateral (metade da velocidade base)
 
 int readLine(int pin);
@@ -70,41 +70,18 @@ void setup() {
 }
 
 void loop() {
-  // Sensores IR de teste
-  int sE = readLine(IR_E); //Sensor esquerdo
-  int sC = readLine(IR_C); //Sensor centro
-  int sD = readLine(IR_D); //Sensor direito
-
-  // Linha no centro → segue reto
-  if (sC == HIGH && sE == LOW && sD == LOW) {
-    moveForward(BASE_SPEED);
-  }
-  // Linha puxando para esquerda → corrige esquerda
-  else if (sE == HIGH && sC == LOW && sD == LOW) {
-    moveLeft(CORRECTION);
-  }
-  // Linha puxando para direita → corrige direita
-  else if (sD == HIGH && sC == LOW && sE == LOW) {
-    moveRight(CORRECTION);
-  }
-  // Centro + lado → curva suave
-  else if (sE == HIGH && sC == HIGH && sD == LOW) {
-    turnLeft(CORRECTION);
-  }
-  else if (sD == HIGH && sC == HIGH && sE == LOW) {
-    turnRight(CORRECTION);
-  }
-  // Linha perdida
-  else if (sE == LOW && sC == LOW && sD == LOW) {
-    stop();
-  }
-
-  Serial.print("E: ");
-  Serial.println(analogRead(IR_E));
-  Serial.print(" C: ");
-  Serial.println(analogRead(IR_C));
-  Serial.print(" D: ");
-  Serial.println(analogRead(IR_D));
+  moveForward(BASE_SPEED);
+  delay(1000);
+  moveBackward(BASE_SPEED);
+  delay(1000);
+  moveLeft(BASE_SPEED);
+  delay(1000);
+  moveRight(BASE_SPEED);
+  delay(1000);
+  turnLeft(CORRECTION);
+  delay(1000);
+  turnRight(CORRECTION);
+  delay(1000);
 }
 
 int readLine(int pin) {
