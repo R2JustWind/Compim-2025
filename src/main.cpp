@@ -16,9 +16,18 @@
 #define RTE_DIR1 51
 #define RTE_DIR2 50
 #define RTE_PWM 13
+// Encoder roda frontal direita
+#define EFD_A 2
+#define EFD_B 3
 // Encoder roda frontal esquerda
-#define EFE_A 2
-#define EFE_B 3
+#define EFE_A 5
+#define EFE_B 6
+// Encoder roda traseira direita
+#define ETD_A 8
+#define ETD_B 9
+// Encoder roda traseira direita
+#define ETE_A 11
+#define ETE_B 12
 
 // Sensores IR
 #define IR_E A0 // Esquerdo
@@ -32,16 +41,35 @@
 #define BASE_SPEED 45 // Velocidade base
 #define CORRECTION 35 // Correção lateral (metade da velocidade base)
 
+volatile long pulseCountEFD = 0;
+volatile long pulseCountEFE = 0;
+volatile long pulseCountETD = 0;
+volatile long pulseCountETE = 0;
+
+unsigned long lastTime = 0;
+long lastPulseEFD = 0, lastPulseEFE = 0, lastPulseETD = 0, lastPulseETE = 0;
+
+float velEFE, velEFD, velETE, velETD;
+
+int correction;
+
+void updateVelocity();
+
 int readLine(int pin);
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
 void moveForward(int speed);
+void moveForwardEncoder(int speed);
 void moveBackward(int speed);
 void moveLeft(int speed);
 void moveRight(int speed);
 void turnLeft(int speed);
 void turnRight(int speed);
 void stop();
+void isrEFE();
+void isrEFD();
+void isrETE();
+void isrETD();
 
 void setup() {
   Serial.begin(9600);
@@ -67,20 +95,26 @@ void setup() {
   pinMode(IR_E, INPUT);
   pinMode(IR_C, INPUT);
   pinMode(IR_D, INPUT);
+
+  pinMode(EFE_A, INPUT_PULLUP);
+  pinMode(EFE_B, INPUT_PULLUP);
+  pinMode(EFD_A, INPUT_PULLUP);
+  pinMode(EFD_B, INPUT_PULLUP);
+  pinMode(ETE_A, INPUT_PULLUP);
+  pinMode(ETE_B, INPUT_PULLUP);
+  pinMode(ETD_A, INPUT_PULLUP);
+  pinMode(ETD_B, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(EFE_A), isrEFE, RISING);
+  attachInterrupt(digitalPinToInterrupt(EFD_A), isrEFD, RISING);
+  attachInterrupt(digitalPinToInterrupt(ETE_A), isrETE, RISING);
+  attachInterrupt(digitalPinToInterrupt(ETD_A), isrETD, RISING);
 }
 
 void loop() {
-  moveForward(BASE_SPEED);
+  moveForwardEncoder(30);
   delay(1000);
-  moveBackward(BASE_SPEED);
-  delay(1000);
-  moveLeft(BASE_SPEED);
-  delay(1000);
-  moveRight(BASE_SPEED);
-  delay(1000);
-  turnLeft(CORRECTION);
-  delay(1000);
-  turnRight(CORRECTION);
+  stop();
   delay(1000);
 }
 
@@ -134,6 +168,20 @@ void moveForward(int speed) {
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
 }
 
+void moveForwardEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwmETD);
+}
+
 void moveLeft(int speed) {
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -speed);
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -speed);
@@ -167,4 +215,54 @@ void stop() {
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, 0);
   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, 0);
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, 0);
+}
+
+void isrEFD() {
+  if(digitalRead(EFD_B) == HIGH) {
+    pulseCountEFD++;
+  } else {
+    pulseCountEFD--;
+  }
+}
+
+void isrEFE() {
+  if(digitalRead(EFE_B) == HIGH) {
+    pulseCountEFE++;
+  } else {
+    pulseCountEFE--;
+  }
+}
+
+void isrETD() {
+  if(digitalRead(ETD_B) == HIGH) {
+    pulseCountETD++;
+  } else {
+    pulseCountETD--;
+  }
+}
+
+void isrETE() {
+  if(digitalRead(ETE_B) == HIGH) {
+    pulseCountETE++;
+  } else {
+    pulseCountETE--;
+  }
+}
+
+void updateVelocity() {
+  unsigned long now = millis();
+
+  if(now - lastTime >= 50) {
+    velEFD = (pulseCountEFD - lastPulseEFD);
+    velEFE = (pulseCountEFE - lastPulseEFE);
+    velETD = (pulseCountETD - lastPulseETD);
+    velETE = (pulseCountETE - lastPulseETE);
+
+    lastPulseEFD = pulseCountEFD;
+    lastPulseEFE = pulseCountEFE;
+    lastPulseETD = pulseCountETD;
+    lastPulseETE = pulseCountETE;
+
+    lastTime = now;
+  }
 }
