@@ -61,10 +61,15 @@ void setMotor(int dir1, int dir2, int pwm, int speed);
 void moveForward(int speed);
 void moveForwardEncoder(int speed);
 void moveBackward(int speed);
+void moveBackwardEncoder(int speed);
 void moveLeft(int speed);
+void moveLeftEncoder(int speed);
 void moveRight(int speed);
+void moveRightEncoder(int speed);
 void turnLeft(int speed);
+void turnLeftEncoder(int speed);
 void turnRight(int speed);
+void turnRightEncoder(int speed);
 void stop();
 void isrEFE();
 void isrEFD();
@@ -161,6 +166,20 @@ void moveBackward(int speed) {
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
 }
 
+void moveBackwardEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
+}
+
 void moveForward(int speed) {
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -speed);
@@ -189,11 +208,39 @@ void moveLeft(int speed) {
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
 }
 
+void moveLeftEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
+}
+
 void moveRight(int speed) {
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
+}
+
+void moveRightEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwmETD);
 }
 
 void turnLeft(int speed) {
@@ -203,11 +250,39 @@ void turnLeft(int speed) {
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
 }
 
+void turnLeftEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwmETD);
+}
+
 void turnRight(int speed) {
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, speed);
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
+}
+
+void turnRightEncoder(int speed) {
+  updateVelocity();
+
+  int pwmEFE = BASE_SPEED + correction * (speed - velEFE);
+  int pwmEFD = BASE_SPEED + correction * (speed - velEFD);
+  int pwmETE = BASE_SPEED + correction * (speed - velETE);
+  int pwmETD = BASE_SPEED + correction * (speed - velETD);
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwmEFD);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwmETE);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
 }
 
 void stop() {
