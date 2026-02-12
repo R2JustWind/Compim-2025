@@ -120,20 +120,20 @@ void loop() {
   moveForwardEncoder(30);
   delay(1000);
   stop();
-  delay(1000);
+  delay(2000);
   if( (pulseCountEFD != lastPulseEFD) || (pulseCountEFE != lastPulseEFE) || (pulseCountETD != lastPulseETD) || (pulseCountETE != lastPulseETE) ){
-      Serial.println(pulseCountEFD);
-      Serial.print(",");
-      Serial.println(pulseCountEFE);
-      Serial.print(",");
-      Serial.println(pulseCountETD);
-      Serial.print(",");
-      Serial.println (pulseCountETE);
-      pulseCountEFD = lastPulseEFD;
-      pulseCountETD = lastPulseETD;
-      pulseCountEFE = lastPulseEFE;
-      pulseCountETE = lastPulseETE;
-    }
+    Serial.print("MDF: ");
+    Serial.print(pulseCountEFD);
+    Serial.print(", ");
+    Serial.print("MEF: ");
+    Serial.print(pulseCountEFE);
+    Serial.print(", ");
+    Serial.print("MDT: ");
+    Serial.print(pulseCountETD);
+    Serial.print(", ");
+    Serial.print("MET: ");
+    Serial.println (pulseCountETE);
+  }
 }
 
 int readLine(int pin) {
@@ -307,9 +307,9 @@ void stop() {
 
 void isrEFD() {
   if(digitalRead(EFD_B) == HIGH) {
-    pulseCountEFD++;
-  } else {
     pulseCountEFD--;
+  } else {
+    pulseCountEFD++;
   }
 }
 
@@ -323,9 +323,9 @@ void isrEFE() {
 
 void isrETD() {
   if(digitalRead(ETD_B) == HIGH) {
-    pulseCountETD++;
-  } else {
     pulseCountETD--;
+  } else {
+    pulseCountETD++;
   }
 }
 
