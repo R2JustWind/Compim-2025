@@ -18,16 +18,16 @@
 #define RTE_PWM 13
 // Encoder roda frontal direita
 #define EFD_A 2
-#define EFD_B 3
+#define EFD_B 27
 // Encoder roda frontal esquerda
-#define EFE_A 5
-#define EFE_B 6
+#define EFE_A 3
+#define EFE_B 26
 // Encoder roda traseira direita
-#define ETD_A 8
-#define ETD_B 9
+#define ETD_A 19
+#define ETD_B 29
 // Encoder roda traseira direita
-#define ETE_A 11
-#define ETE_B 12
+#define ETE_A 18
+#define ETE_B 28
 
 // Sensores IR
 #define IR_E A0 // Esquerdo
@@ -121,6 +121,19 @@ void loop() {
   delay(1000);
   stop();
   delay(1000);
+  if( (pulseCountEFD != lastPulseEFD) || (pulseCountEFE != lastPulseEFE) || (pulseCountETD != lastPulseETD) || (pulseCountETE != lastPulseETE) ){
+      Serial.println(pulseCountEFD);
+      Serial.print(",");
+      Serial.println(pulseCountEFE);
+      Serial.print(",");
+      Serial.println(pulseCountETD);
+      Serial.print(",");
+      Serial.println (pulseCountETE);
+      pulseCountEFD = lastPulseEFD;
+      pulseCountETD = lastPulseETD;
+      pulseCountEFE = lastPulseEFE;
+      pulseCountETE = lastPulseETE;
+    }
 }
 
 int readLine(int pin) {
