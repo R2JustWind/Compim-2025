@@ -1,4 +1,6 @@
 #include <Arduino.h> 
+#include <util/atomic.h>
+
 //DIR1 = INA  DIR2 = INB
 // Driver1A - Roda frontal direita - M1
 #define RFD_DIR1 22
@@ -48,8 +50,9 @@ volatile long pulseCountETE = 0;
 
 unsigned long lastTime = 0;
 long lastPulseEFD = 0, lastPulseEFE = 0, lastPulseETD = 0, lastPulseETE = 0;
+volatile int pos_i = 0;
 
-float eprevEFD, eprevEFE, eprevETD, eprevETE;
+float eprevEFD, posprevEFE, eprevETD, eprevETE;
 float eintegralEFD, eintegralEFE, eintegralETD, eintegralETE;
 
 int correction;
@@ -80,6 +83,7 @@ void moveMFE(int target);
 void moveMFD(int target);
 void moveMTE(int target);
 void moveMTD(int target);
+void calculateSpeed();
 
 void setup() {
   Serial.begin(9600);
@@ -122,11 +126,13 @@ void setup() {
 }
 
 void loop() {
-  moveMFE(TARGET);
-  moveMFD(TARGET);
-  moveMTE(TARGET);
-  moveMTD(TARGET);
-  delay(1000);
+  int pwr = 25;
+
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwr);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwr);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwr);
+  calculateSpeed();
 }
 
 int readLine(int pin) {
@@ -337,21 +343,21 @@ void moveMFE(int target) {
 
   int e = pulseCountEFE - target;
 
-  float dedt = (e - eprevEFE) / deltaT;
+  //float dedt = (e - eprevEFE) / deltaT;
 
   eintegralEFE += e*deltaT;
 
-  float u = kp*e + ki*eintegralEFE + kd*dedt;
+ // float u = kp*e + ki*eintegralEFE + kd*dedt;
 
-  float pwr = u;
-  if(pwr > 255) {
-    pwr = 255;
-  } else if(pwr < -255) {
-    pwr = -255;
-  }
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
+ // float pwr = u;
+  // if(pwr > 255) {
+  //   pwr = 255;
+  // } else if(pwr < -255) {
+  //   pwr = -255;
+  // }
+  // setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
 
-  eprevEFE = e;
+ // eprevEFE = e;
 
 }
 
@@ -441,6 +447,25 @@ void moveMTD(int target) {
   }
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwr);
 
-  eprevETD = e;
+  eprevETD  = e;
 
+}
+
+void calculateSpeed() {
+  int pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountEFE;
+  }
+
+  long currT = micros();
+  float deltaT = ((float) (currT - lastTime))/1.0e6;
+  float velocity1 = (pos - posprevEFE)/deltaT;
+
+  posprevEFE = pos;
+  lastTime = currT;
+
+  float v1 = velocity1 / 480.0 * 60.0;
+
+  Serial.print(v1);
+  Serial.println();
 }
