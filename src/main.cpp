@@ -40,13 +40,13 @@
 #define THRESHOLD_CENTER 40
 // THRESHOLD = (preto + branco) / 2;
 
-volatile int pulseCountEFD = 0, pulseCountEFE = 0, pulseCountETD = 0, pulseCountETE = 0;
+volatile long pulseCountEFD = 0, pulseCountEFE = 0, pulseCountETD = 0, pulseCountETE = 0;
 
 unsigned long lastTime = 0;
 long lastPulseEFD = 0, lastPulseEFE = 0, lastPulseETD = 0, lastPulseETE = 0;
 
-float eprevEFD, posprevEFE, eprevETD, eprevETE;
-float eintegralEFD, eintegralEFE, eintegralETD, eintegralETE;
+float posprevEFD = 0, posprevEFE = 0, posprevETD = 0, posprevETE = 0;
+float eintegralEFD = 0, eintegralEFE = 0, eintegralETD = 0, eintegralETE = 0;
 
 float deltaT;
 long currT;
@@ -69,7 +69,7 @@ void moveMFE(int target);
 void moveMFD(int target);
 void moveMTE(int target);
 void moveMTD(int target);
-void calculateSpeedEFE();
+float calculateSpeedEFE();
 
 void setup() {
   Serial.begin(9600);
@@ -115,10 +115,24 @@ void loop() {
   currT = micros();
   deltaT = ((float) (currT - lastTime))/1.0e6;
 
-  calculateSpeedEFE();
+  float v1 = calculateSpeedEFE();
+  float v2 = calculateSpeedEFD();
+  float v3 = calculateSpeedETD();
+  float v4 = calculateSpeedETE();
+
+  Serial.print(100);
+  Serial.print(" ");
+  Serial.print(v1);
+  Serial.print(" ");
+  Serial.print(-v2);
+  Serial.print(" ");
+  Serial.print(-v3);
+  Serial.print(" ");
+  Serial.print(v4);
+  Serial.println();
 
   lastTime = currT;
-  delay(10);
+  delay(20);
 
 }
 
@@ -174,9 +188,9 @@ void stop() {
 
 void isrEFD() {
   if(digitalRead(EFD_B) == HIGH) {
-    pulseCountEFD--;
-  } else {
     pulseCountEFD++;
+  } else {
+    pulseCountEFD--;
   }
 }
 
@@ -190,9 +204,9 @@ void isrEFE() {
 
 void isrETD() {
   if(digitalRead(ETD_B) == HIGH) {
-    pulseCountETD--;
-  } else {
     pulseCountETD++;
+  } else {
+    pulseCountETD--;
   }
 }
 
@@ -204,8 +218,8 @@ void isrETE() {
   }
 }
 
-void calculateSpeedEFE() {
-  int pos = 0;
+float calculateSpeedEFE() {
+  volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     pos = pulseCountEFE;
   }
@@ -218,12 +232,12 @@ void calculateSpeedEFE() {
 
   float vt = 100*(sin(currT/1e6)>0);
 
-  float kp = 2;
-  float ki = 10;
+  float kp = 1.5;
+  float ki = 6;
   float e = vt-v1;
-  float eintegral =+ e*deltaT;
+  eintegralEFE = eintegralEFE + (e*deltaT);
 
-  float u = kp*e + ki*eintegral;
+  float u = kp*e + ki*eintegralEFE;
 
   int pwr = u;
   if(pwr > 255) {
@@ -233,8 +247,100 @@ void calculateSpeedEFE() {
   }
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
 
-  Serial.print(v1);
-  Serial.print(" ");
-  Serial.print(vt);
-  Serial.println();
+  return v1;
+}
+
+float calculateSpeedEFD() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountEFD;
+  }
+
+  float velocity1 = (pos - posprevEFD)/deltaT;
+
+  posprevEFD = pos;
+
+  float v2 = velocity1/480.0*60.0;
+
+  float vt = -100*(sin(currT/1e6)>0);
+
+  float kp = 1.75;
+  float ki = 8;
+  float e = vt-v2;
+  eintegralEFD = eintegralEFD + (e*deltaT);
+
+  float u = kp*e + ki*eintegralEFD;
+
+  int pwr = u;
+  if(pwr > 255) {
+    pwr = 255;
+  } else if(pwr < -255) {
+    pwr = -255;
+  }
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwr);
+  
+  return v2;
+}
+
+float calculateSpeedETD() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountETD;
+  }
+
+  float velocity1 = (pos - posprevETD)/deltaT;
+
+  posprevETD = pos;
+
+  float v3 = velocity1/480.0*60.0;
+
+  float vt = -100*(sin(currT/1e6)>0);
+
+  float kp = 1.75;
+  float ki = 5;
+  float e = vt-v3;
+  eintegralETD = eintegralETD + (e*deltaT);
+
+  float u = kp*e + ki*eintegralETD;
+
+  int pwr = u;
+  if(pwr > 255) {
+    pwr = 255;
+  } else if(pwr < -255) {
+    pwr = -255;
+  }
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwr);
+
+  return v3;
+}
+float calculateSpeedETE() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountETE;
+  }
+
+  float velocity1 = (pos - posprevETE)/deltaT;
+
+  posprevETE = pos;
+
+  float v4 = velocity1/480.0*60.0;
+
+  float vt = 100*(sin(currT/1e6)>0);
+
+  float kp = 1.5;
+  float ki = 8;
+  float e = vt-v4;
+  eintegralETE = eintegralETE + (e*deltaT);
+
+  float u = kp*e + ki*eintegralETE;
+
+  int pwr = u;
+  if(pwr > 255) {
+    pwr = 255;
+  } else if(pwr < -255) {
+    pwr = -255;
+  }
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwr);
+
+  return v4;
 }
