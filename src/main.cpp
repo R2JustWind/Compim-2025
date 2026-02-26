@@ -1,4 +1,4 @@
-#include <Arduino.h> 
+#include <Arduino.h>
 #include <util/atomic.h>
 
 //DIR1 = INA  DIR2 = INB
@@ -19,10 +19,10 @@
 #define RTE_DIR2 50
 #define RTE_PWM 13
 // Encoder roda frontal direita
-#define EFD_A 2
+#define EFD_A 3
 #define EFD_B 27
 // Encoder roda frontal esquerda
-#define EFE_A 3
+#define EFE_A 2
 #define EFE_B 26
 // Encoder roda traseira direita
 #define ETD_A 19
@@ -36,44 +36,30 @@
 #define IR_C A1 // Centro
 #define IR_D A2 // Direito
 
-#define THRESHOLD 90 // Limiar para detecção de linha
+#define THRESHOLD 100 // Limiar para detecção de linha
 #define THRESHOLD_CENTER 40
 // THRESHOLD = (preto + branco) / 2;
 
-#define TARGET 30 // Velocidade base
-#define CORRECTION 25 // Correção lateral (metade da velocidade base)
-
-volatile long pulseCountEFD = 0;
-volatile long pulseCountEFE = 0;
-volatile long pulseCountETD = 0;
-volatile long pulseCountETE = 0;
+volatile long pulseCountEFD = 0, pulseCountEFE = 0, pulseCountETD = 0, pulseCountETE = 0;
 
 unsigned long lastTime = 0;
 long lastPulseEFD = 0, lastPulseEFE = 0, lastPulseETD = 0, lastPulseETE = 0;
-volatile int pos_i = 0;
 
-float eprevEFD, posprevEFE, eprevETD, eprevETE;
-float eintegralEFD, eintegralEFE, eintegralETD, eintegralETE;
+float posprevEFD = 0, posprevEFE = 0, posprevETD = 0, posprevETE = 0;
+float eintegralEFD = 0, eintegralEFE = 0, eintegralETD = 0, eintegralETE = 0;
 
-int correction;
-
-void updateVelocity();
+float deltaT;
+long currT;
 
 int readLine(int pin);
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
 void moveForward(int speed);
-void moveForwardEncoder(int speed);
 void moveBackward(int speed);
-void moveBackwardEncoder(int speed);
 void moveLeft(int speed);
-void moveLeftEncoder(int speed);
 void moveRight(int speed);
-void moveRightEncoder(int speed);
 void turnLeft(int speed);
-void turnLeftEncoder(int speed);
 void turnRight(int speed);
-void turnRightEncoder(int speed);
 void stop();
 void isrEFE();
 void isrEFD();
@@ -83,7 +69,10 @@ void moveMFE(int target);
 void moveMFD(int target);
 void moveMTE(int target);
 void moveMTD(int target);
-void calculateSpeed();
+float calculateSpeedEFE();
+float calculateSpeedEFD();
+float calculateSpeedETD();
+float calculateSpeedETE();
 
 void setup() {
   Serial.begin(9600);
@@ -126,13 +115,28 @@ void setup() {
 }
 
 void loop() {
-  int pwr = 25;
+  currT = micros();
+  deltaT = ((float) (currT - lastTime))/1.0e6;
 
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
-  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwr);
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwr);
-  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwr);
-  calculateSpeed();
+  float v1 = calculateSpeedEFE();
+  float v2 = calculateSpeedEFD();
+  float v3 = calculateSpeedETD();
+  float v4 = calculateSpeedETE();
+
+  Serial.print(100);
+  Serial.print(" ");
+  Serial.print(v1);
+  Serial.print(" ");
+  Serial.print(-v2);
+  Serial.print(" ");
+  Serial.print(-v3);
+  Serial.print(" ");
+  Serial.print(v4);
+  Serial.println();
+
+  lastTime = currT;
+  delay(20);
+
 }
 
 int readLine(int pin) {
@@ -178,112 +182,6 @@ void moveBackward(int speed) {
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
 }
 
-// void moveBackwardEncoder(int speed) {
-//   updateVelocity();
-
-//   int pwmEFE = TARGET + correction * (speed - velEFE);
-//   int pwmEFD = TARGET + correction * (speed - velEFD);
-//   int pwmETE = TARGET + correction * (speed - velETE);
-//   int pwmETD = TARGET + correction * (speed - velETD);
-
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
-// }
-
-// void moveForward(int speed) {
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -speed);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, speed);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
-// }
-
-// void moveForwardEncoder(int speed) {
-//   updateVelocity();
-
-//   int e = pulseCountEFD - TARGET;
-
-//   float dedt = (e - eprev)/(deltaT);
-// }
-
-// void moveLeftEncoder(int speed) {
-//   updateVelocity();
-
-//   int pwmEFE = TARGET + correction * (speed - velEFE);
-//   int pwmEFD = TARGET + correction * (speed - velEFD);
-//   int pwmETE = TARGET + correction * (speed - velETE);
-//   int pwmETD = TARGET + correction * (speed - velETD);
-
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -pwmEFE);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwmETE);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
-// }
-
-// void moveRight(int speed) {
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
-// }
-
-// void moveRightEncoder(int speed) {
-//   updateVelocity();
-
-//   int pwmEFE = TARGET + correction * (speed - velEFE);
-//   int pwmEFD = TARGET + correction * (speed - velEFD);
-//   int pwmETE = TARGET + correction * (speed - velETE);
-//   int pwmETD = TARGET + correction * (speed - velETD);
-
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwmEFD);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwmETD);
-// }
-
-// void turnLeft(int speed) {
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -speed);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -speed);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -speed);
-// }
-
-// void turnLeftEncoder(int speed) {
-//   updateVelocity();
-
-//   int pwmEFE = TARGET + correction * (speed - velEFE);
-//   int pwmEFD = TARGET + correction * (speed - velEFD);
-//   int pwmETE = TARGET + correction * (speed - velETE);
-//   int pwmETD = TARGET + correction * (speed - velETD);
-
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -pwmEFD);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, -pwmEFE);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -pwmETE);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, -pwmETD);
-// }
-
-// void turnRight(int speed) {
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, speed);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, speed);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
-// }
-
-// void turnRightEncoder(int speed) {
-//   updateVelocity();
-
-//   int pwmEFE = TARGET + correction * (speed - velEFE);
-//   int pwmEFD = TARGET + correction * (speed - velEFD);
-//   int pwmETE = TARGET + correction * (speed - velETE);
-//   int pwmETD = TARGET + correction * (speed - velETD);
-
-//   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwmEFD);
-//   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwmEFE);
-//   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwmETE);
-//   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwmETD);
-// }
-
 void stop() {
   setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, 0);
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, 0);
@@ -293,9 +191,9 @@ void stop() {
 
 void isrEFD() {
   if(digitalRead(EFD_B) == HIGH) {
-    pulseCountEFD--;
-  } else {
     pulseCountEFD++;
+  } else {
+    pulseCountEFD--;
   }
 }
 
@@ -309,9 +207,9 @@ void isrEFE() {
 
 void isrETD() {
   if(digitalRead(ETD_B) == HIGH) {
-    pulseCountETD--;
-  } else {
     pulseCountETD++;
+  } else {
+    pulseCountETD--;
   }
 }
 
@@ -323,123 +221,92 @@ void isrETE() {
   }
 }
 
-void updateVelocity() {
-  unsigned long now = micros();
+float calculateSpeedEFE() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountEFE;
+  }
 
-  float deltaT = ((float)(now - lastTime)) / 1.0e6;
+  float velocity1 = (pos - posprevEFE)/deltaT;
 
-  lastTime = now;
+  posprevEFE = pos;
+
+  float v1 = velocity1/480.0*60.0;
+
+  float vt = 100*(sin(currT/1e6)>0);
+
+  float kp = 1;
+  float ki = 3;
+  float e = vt-v1;
+  eintegralEFE = eintegralEFE + (e*deltaT);
+
+  float u = kp*e + ki*eintegralEFE;
+
+  int pwr = u;
+  if(pwr > 255) {
+    pwr = 255;
+  } else if(pwr < -255) {
+    pwr = -255;
+  }
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
+
+  return v1;
 }
 
-void moveMFE(int target) {
-  float kp = 1;
-  float ki = 0;
-  float kd = 0;
+float calculateSpeedEFD() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountEFD;
+  }
 
-  long currentTime = micros();
+  float velocity1 = (pos - posprevEFD)/deltaT;
 
-  float deltaT = ((float)(currentTime - lastTime)) / 1.0e6;
-  lastTime = currentTime;
+  posprevEFD = pos;
 
-  int e = pulseCountEFE - target;
+  float v2 = velocity1/480.0*60.0;
 
-  //float dedt = (e - eprevEFE) / deltaT;
+  float vt = -100*(sin(currT/1e6)>0);
 
-  eintegralEFE += e*deltaT;
+  float kp = 1.2;
+  float ki = 5;
+  float e = vt-v2;
+  eintegralEFD = eintegralEFD + (e*deltaT);
 
- // float u = kp*e + ki*eintegralEFE + kd*dedt;
+  float u = kp*e + ki*eintegralEFD;
 
- // float pwr = u;
-  // if(pwr > 255) {
-  //   pwr = 255;
-  // } else if(pwr < -255) {
-  //   pwr = -255;
-  // }
-  // setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, pwr);
-
- // eprevEFE = e;
-
-}
-
-void moveMFD(int target) {
-  float kp = 1;
-  float ki = 0;
-  float kd = 0;
-
-  long currentTime = micros();
-
-  float deltaT = ((float)(currentTime - lastTime)) / 1.0e6;
-  lastTime = currentTime;
-
-  int e = pulseCountEFD - target;
-
-  float dedt = (e - eprevEFD) / deltaT;
-
-  eintegralEFD += e*deltaT;
-
-  float u = kp*e + ki*eintegralEFD + kd*dedt;
-
-  float pwr = u;
+  int pwr = u;
   if(pwr > 255) {
     pwr = 255;
   } else if(pwr < -255) {
     pwr = -255;
   }
   setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, pwr);
-
-  eprevEFD = e;
-
+  
+  return v2;
 }
 
-void moveMTE(int target) {
-  float kp = 1;
-  float ki = 0;
-  float kd = 0;
-
-  long currentTime = micros();
-
-  float deltaT = ((float)(currentTime - lastTime)) / 1.0e6;
-  lastTime = currentTime;
-
-  int e = pulseCountETE - target;
-
-  float dedt = (e - eprevETE) / deltaT;
-
-  eintegralETE += e*deltaT;
-
-  float u = kp*e + ki*eintegralETE + kd*dedt;
-
-  float pwr = u;
-  if(pwr > 255) {
-    pwr = 255;
-  } else if(pwr < -255) {
-    pwr = -255;
+float calculateSpeedETD() {
+  volatile long pos = 0;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    pos = pulseCountETD;
   }
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwr);
 
-  eprevETE = e;
+  float velocity1 = (pos - posprevETD)/deltaT;
 
-}
+  posprevETD = pos;
 
-void moveMTD(int target) {
+  float v3 = velocity1/480.0*60.0;
+
+  float vt = -100*(sin(currT/1e6)>0);
+
   float kp = 1;
-  float ki = 0;
-  float kd = 0;
+  float ki = 3;
+  float e = vt-v3;
+  eintegralETD = eintegralETD + (e*deltaT);
 
-  long currentTime = micros();
+  float u = kp*e + ki*eintegralETD;
 
-  float deltaT = ((float)(currentTime - lastTime)) / 1.0e6;
-  lastTime = currentTime;
-
-  int e = pulseCountETD - target;
-
-  float dedt = (e - eprevETD) / deltaT;
-
-  eintegralETD += e*deltaT;
-
-  float u = kp*e + ki*eintegralETD + kd*dedt;
-
-  float pwr = u;
+  int pwr = u;
   if(pwr > 255) {
     pwr = 255;
   } else if(pwr < -255) {
@@ -447,25 +314,36 @@ void moveMTD(int target) {
   }
   setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, pwr);
 
-  eprevETD  = e;
-
+  return v3;
 }
-
-void calculateSpeed() {
-  int pos = 0;
+float calculateSpeedETE() {
+  volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    pos = pulseCountEFE;
+    pos = pulseCountETE;
   }
 
-  long currT = micros();
-  float deltaT = ((float) (currT - lastTime))/1.0e6;
-  float velocity1 = (pos - posprevEFE)/deltaT;
+  float velocity1 = (pos - posprevETE)/deltaT;
 
-  posprevEFE = pos;
-  lastTime = currT;
+  posprevETE = pos;
 
-  float v1 = velocity1 / 480.0 * 60.0;
+  float v4 = velocity1/480.0*60.0;
 
-  Serial.print(v1);
-  Serial.println();
+  float vt = 100*(sin(currT/1e6)>0);
+
+  float kp = 1;
+  float ki = 2.9;
+  float e = vt-v4;
+  eintegralETE = eintegralETE + (e*deltaT);
+
+  float u = kp*e + ki*eintegralETE;
+
+  int pwr = u;
+  if(pwr > 255) {
+    pwr = 255;
+  } else if(pwr < -255) {
+    pwr = -255;
+  }
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwr);
+
+  return v4;
 }
