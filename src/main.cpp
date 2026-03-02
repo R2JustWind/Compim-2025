@@ -65,10 +65,9 @@ void isrEFE();
 void isrEFD();
 void isrETE();
 void isrETD();
-void moveMFE(int target);
-void moveMFD(int target);
-void moveMTE(int target);
-void moveMTD(int target);
+float calculateSpeedEFD();
+float calculateSpeedETD();
+float calculateSpeedETE();
 float calculateSpeedEFE();
 
 void setup() {
@@ -232,8 +231,8 @@ float calculateSpeedEFE() {
 
   float vt = 100*(sin(currT/1e6)>0);
 
-  float kp = 1.5;
-  float ki = 6;
+  float kp = 1;
+  float ki = 3;
   float e = vt-v1;
   eintegralEFE = eintegralEFE + (e*deltaT);
 
@@ -264,8 +263,8 @@ float calculateSpeedEFD() {
 
   float vt = -100*(sin(currT/1e6)>0);
 
-  float kp = 1.75;
-  float ki = 8;
+  float kp = 1.2;
+  float ki = 6.4;
   float e = vt-v2;
   eintegralEFD = eintegralEFD + (e*deltaT);
 
@@ -296,8 +295,8 @@ float calculateSpeedETD() {
 
   float vt = -100*(sin(currT/1e6)>0);
 
-  float kp = 1.75;
-  float ki = 5;
+  float kp = 1;
+  float ki = 3;
   float e = vt-v3;
   eintegralETD = eintegralETD + (e*deltaT);
 
@@ -327,8 +326,8 @@ float calculateSpeedETE() {
 
   float vt = 100*(sin(currT/1e6)>0);
 
-  float kp = 1.5;
-  float ki = 8;
+  float kp = 1;
+  float ki = 2.9;
   float e = vt-v4;
   eintegralETE = eintegralETE + (e*deltaT);
 
