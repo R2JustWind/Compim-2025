@@ -38,6 +38,10 @@
 
 #define THRESHOLD 90 // Limiar para detecção de linha
 #define THRESHOLD_CENTER 40
+
+#define BASE_SPEED 45 // Velocidade base
+#define CORRECTION 35 //
+
 // THRESHOLD = (preto + branco) / 2;
 
 volatile long pulseCountEFD = 0, pulseCountEFE = 0, pulseCountETD = 0, pulseCountETE = 0;
@@ -114,21 +118,61 @@ void loop() {
   currT = micros();
   deltaT = ((float) (currT - lastTime))/1.0e6;
 
-  float v1 = calculateSpeedEFE();
-  float v2 = calculateSpeedEFD();
-  float v3 = calculateSpeedETD();
-  float v4 = calculateSpeedETE();
+  float v1 = calculateSpeedEFE(100);
+  float v2 = calculateSpeedEFD(100);
+  float v3 = calculateSpeedETD(100);
+  float v4 = calculateSpeedETE(100);
 
-  Serial.print(100);
-  Serial.print(" ");
-  Serial.print(v1);
-  Serial.print(" ");
-  Serial.print(-v2);
-  Serial.print(" ");
-  Serial.print(-v3);
-  Serial.print(" ");
-  Serial.print(v4);
-  Serial.println();
+  // Sensores IR de teste
+  int sE = readLine(IR_E); //Sensor esquerdo
+  int sC = readLine(IR_C); //Sensor centro
+  int sD = readLine(IR_D); //Sensor direito
+
+  // Linha no centro → segue reto
+  if (sC == HIGH && sE == LOW && sD == LOW) {
+    calculateSpeedEFE(100);
+    calculateSpeedEFD(-100);
+    calculateSpeedETD(-100);
+    calculateSpeedETE(100);
+  }
+  // Linha puxando para esquerda → corrige esquerda
+  else if (sE == HIGH && sC == LOW && sD == LOW) {
+    calculateSpeedEFE(-100);
+    calculateSpeedEFD(-100);
+    calculateSpeedETD(100);
+    calculateSpeedETE(100);
+  }
+  // Linha puxando para direita → corrige direita
+  else if (sD == HIGH && sC == LOW && sE == LOW) {
+    calculateSpeedEFE(100);
+    calculateSpeedEFD(100);
+    calculateSpeedETD(-100);
+    calculateSpeedETE(-100);
+  }
+  // Centro + lado → curva suave
+  else if (sE == HIGH && sC == HIGH && sD == LOW) {
+    calculateSpeedEFE(-100);
+    calculateSpeedEFD(-100);
+    calculateSpeedETD(-100);
+    calculateSpeedETE(-100);
+  }
+  else if (sD == HIGH && sC == HIGH && sE == LOW) {
+    calculateSpeedEFE(100);
+    calculateSpeedEFD(100);
+    calculateSpeedETD(100);
+    calculateSpeedETE(100);
+  }
+  // Linha perdida
+  else if (sE == LOW && sC == LOW && sD == LOW) {
+    stop();
+  }
+
+  Serial.print("E: ");
+  Serial.println(analogRead(IR_E));
+  Serial.print(" C: ");
+  Serial.println(analogRead(IR_C));
+  Serial.print(" D: ");
+  Serial.println(analogRead(IR_D));
 
   lastTime = currT;
   delay(20);
@@ -217,7 +261,7 @@ void isrETE() {
   }
 }
 
-float calculateSpeedEFE() {
+float calculateSpeedEFE(float vt) {
   volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     pos = pulseCountEFE;
@@ -228,8 +272,6 @@ float calculateSpeedEFE() {
   posprevEFE = pos;
 
   float v1 = velocity1/480.0*60.0;
-
-  float vt = 100*(sin(currT/1e6)>0);
 
   float kp = 1;
   float ki = 3;
@@ -249,7 +291,8 @@ float calculateSpeedEFE() {
   return v1;
 }
 
-float calculateSpeedEFD() {
+// Negativo é para frente
+float calculateSpeedEFD(float vt) {
   volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     pos = pulseCountEFD;
@@ -260,8 +303,6 @@ float calculateSpeedEFD() {
   posprevEFD = pos;
 
   float v2 = velocity1/480.0*60.0;
-
-  float vt = -100*(sin(currT/1e6)>0);
 
   float kp = 1.2;
   float ki = 6.4;
@@ -281,7 +322,8 @@ float calculateSpeedEFD() {
   return v2;
 }
 
-float calculateSpeedETD() {
+// Negativo é para frente
+float calculateSpeedETD(float vt) {
   volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     pos = pulseCountETD;
@@ -292,8 +334,6 @@ float calculateSpeedETD() {
   posprevETD = pos;
 
   float v3 = velocity1/480.0*60.0;
-
-  float vt = -100*(sin(currT/1e6)>0);
 
   float kp = 1;
   float ki = 3;
@@ -312,7 +352,7 @@ float calculateSpeedETD() {
 
   return v3;
 }
-float calculateSpeedETE() {
+float calculateSpeedETE(float vt) {
   volatile long pos = 0;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     pos = pulseCountETE;
@@ -324,7 +364,6 @@ float calculateSpeedETE() {
 
   float v4 = velocity1/480.0*60.0;
 
-  float vt = 100*(sin(currT/1e6)>0);
 
   float kp = 1;
   float ki = 2.9;
