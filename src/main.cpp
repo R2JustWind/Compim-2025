@@ -11,12 +11,12 @@
 #define RFE_DIR2 25
 #define RFE_PWM 7
 // Driver2A - Roda traseira direita - M3
-#define RTD_DIR1 53
-#define RTD_DIR2 52
+#define RTD_DIR1 50
+#define RTD_DIR2 51
 #define RTD_PWM 10
 // Driver2B - Roda traseira esquerda - M4
-#define RTE_DIR1 51
-#define RTE_DIR2 50
+#define RTE_DIR1 52
+#define RTE_DIR2 53
 #define RTE_PWM 13
 // Encoder roda frontal direita
 #define EFD_A 2
@@ -35,6 +35,12 @@
 #define IR_E A0 // Esquerdo
 #define IR_C A1 // Centro
 #define IR_D A2 // Direito
+
+// Ultrassom
+#define TRIG 40
+#define ECHO 41
+
+#define DIST 15
 
 #define THRESHOLD 90 // Limiar para detecção de linha
 #define THRESHOLD_CENTER 40
@@ -55,24 +61,21 @@ float eintegralEFD = 0, eintegralEFE = 0, eintegralETD = 0, eintegralETE = 0;
 float deltaT;
 long currT;
 
+int contador = 0;
+
 int readLine(int pin);
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
-void moveForward(int speed);
-void moveBackward(int speed);
-void moveLeft(int speed);
-void moveRight(int speed);
-void turnLeft(int speed);
-void turnRight(int speed);
 void stop();
 void isrEFE();
 void isrEFD();
 void isrETE();
 void isrETD();
-float calculateSpeedEFD();
-float calculateSpeedETD();
-float calculateSpeedETE();
-float calculateSpeedEFE();
+float calculateSpeedEFD(float vt);
+float calculateSpeedETD(float vt);
+float calculateSpeedETE(float vt);
+float calculateSpeedEFE(float vt);
+float readUltrassonic();
 
 void setup() {
   Serial.begin(9600);
@@ -99,6 +102,10 @@ void setup() {
   pinMode(IR_C, INPUT);
   pinMode(IR_D, INPUT);
 
+  // Ultrassom
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+
   pinMode(EFE_A, INPUT_PULLUP);
   pinMode(EFE_B, INPUT_PULLUP);
   pinMode(EFD_A, INPUT_PULLUP);
@@ -118,61 +125,61 @@ void loop() {
   currT = micros();
   deltaT = ((float) (currT - lastTime))/1.0e6;
 
-  float v1 = calculateSpeedEFE(100);
-  float v2 = calculateSpeedEFD(100);
-  float v3 = calculateSpeedETD(100);
-  float v4 = calculateSpeedETE(100);
+  float distance = readUltrassonic();
 
-  // Sensores IR de teste
-  int sE = readLine(IR_E); //Sensor esquerdo
-  int sC = readLine(IR_C); //Sensor centro
-  int sD = readLine(IR_D); //Sensor direito
-
-  // Linha no centro → segue reto
-  if (sC == HIGH && sE == LOW && sD == LOW) {
-    calculateSpeedEFE(100);
-    calculateSpeedEFD(-100);
-    calculateSpeedETD(-100);
-    calculateSpeedETE(100);
-  }
-  // Linha puxando para esquerda → corrige esquerda
-  else if (sE == HIGH && sC == LOW && sD == LOW) {
-    calculateSpeedEFE(-100);
-    calculateSpeedEFD(-100);
-    calculateSpeedETD(100);
-    calculateSpeedETE(100);
-  }
-  // Linha puxando para direita → corrige direita
-  else if (sD == HIGH && sC == LOW && sE == LOW) {
-    calculateSpeedEFE(100);
-    calculateSpeedEFD(100);
-    calculateSpeedETD(-100);
-    calculateSpeedETE(-100);
-  }
-  // Centro + lado → curva suave
-  else if (sE == HIGH && sC == HIGH && sD == LOW) {
-    calculateSpeedEFE(-100);
-    calculateSpeedEFD(-100);
-    calculateSpeedETD(-100);
-    calculateSpeedETE(-100);
-  }
-  else if (sD == HIGH && sC == HIGH && sE == LOW) {
-    calculateSpeedEFE(100);
-    calculateSpeedEFD(100);
-    calculateSpeedETD(100);
-    calculateSpeedETE(100);
-  }
-  // Linha perdida
-  else if (sE == LOW && sC == LOW && sD == LOW) {
+  if (distance <= DIST && distance > 0) {
     stop();
   }
+  else {
+    // Sensores IR de teste
+    int sE = readLine(IR_E); //Sensor esquerdo
+    int sC = readLine(IR_C); //Sensor centro
+    int sD = readLine(IR_D); //Sensor direito
 
-  Serial.print("E: ");
-  Serial.println(analogRead(IR_E));
-  Serial.print(" C: ");
-  Serial.println(analogRead(IR_C));
-  Serial.print(" D: ");
-  Serial.println(analogRead(IR_D));
+    // Linha no centro → segue reto
+    if (sC == HIGH && sE == LOW && sD == LOW) {
+      calculateSpeedEFE(50);
+      calculateSpeedEFD(-50);
+      calculateSpeedETD(-50);
+      calculateSpeedETE(50);
+    }
+    // Linha puxando para esquerda → corrige esquerda
+    else if (sE == HIGH && sC == LOW && sD == LOW) {
+      calculateSpeedEFE(-50);
+      calculateSpeedEFD(-50);
+      calculateSpeedETD(50);
+      calculateSpeedETE(50);
+    }
+    // Linha puxando para direita → corrige direita
+    else if (sD == HIGH && sC == LOW && sE == LOW) {
+      calculateSpeedEFE(50);
+      calculateSpeedEFD(50);
+      calculateSpeedETD(-50);
+      calculateSpeedETE(-50);
+    }
+    // Centro + lado → curva suave
+    else if (sE == HIGH && sC == HIGH && sD == LOW) {
+      calculateSpeedEFE(-50);
+      calculateSpeedEFD(-50);
+      calculateSpeedETD(-50);
+      calculateSpeedETE(-50);
+
+    }
+    else if (sD == HIGH && sC == HIGH && sE == LOW) {
+      calculateSpeedEFE(50);
+      calculateSpeedEFD(50);
+      calculateSpeedETD(50);
+      calculateSpeedETE(50);
+    }
+    // Linha perdida
+    else if (sE == LOW && sC == LOW && sD == LOW) {
+      stop();
+    }
+
+    Serial.print(distance);
+    Serial.println(" ");
+
+  }
 
   lastTime = currT;
   delay(20);
@@ -213,13 +220,6 @@ void setMotor(int dir1, int dir2, int pwm, int speed) {
     digitalWrite(dir2, LOW);
     analogWrite(pwm, 0);
   }
-}
-
-void moveBackward(int speed) {
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -speed);
-  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
-  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
 }
 
 void stop() {
@@ -304,8 +304,8 @@ float calculateSpeedEFD(float vt) {
 
   float v2 = velocity1/480.0*60.0;
 
-  float kp = 1.2;
-  float ki = 6.4;
+  float kp = 1.5;
+  float ki = 3;
   float e = vt-v2;
   eintegralEFD = eintegralEFD + (e*deltaT);
 
@@ -335,7 +335,7 @@ float calculateSpeedETD(float vt) {
 
   float v3 = velocity1/480.0*60.0;
 
-  float kp = 1;
+  float kp = 1.5;
   float ki = 3;
   float e = vt-v3;
   eintegralETD = eintegralETD + (e*deltaT);
@@ -364,8 +364,7 @@ float calculateSpeedETE(float vt) {
 
   float v4 = velocity1/480.0*60.0;
 
-
-  float kp = 1;
+  float kp = 1.5;
   float ki = 2.9;
   float e = vt-v4;
   eintegralETE = eintegralETE + (e*deltaT);
@@ -381,4 +380,20 @@ float calculateSpeedETE(float vt) {
   setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, pwr);
 
   return v4;
+}
+
+float readUltrassonic() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  long duration = pulseIn(ECHO, HIGH);
+
+  float distance = duration * 0.034 / 2.0;
+
+  return distance;
+
 }
