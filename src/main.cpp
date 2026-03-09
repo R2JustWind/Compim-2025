@@ -37,13 +37,13 @@
 #define IR_D A2 // Direito
 
 // Ultrassom
-#define TRIG 40
-#define ECHO 41
+#define TRIG 42
+#define ECHO 43
 
 #define DIST 15
 
-#define THRESHOLD 90 // Limiar para detecção de linha
-#define THRESHOLD_CENTER 40
+#define THRESHOLD 150 // Limiar para detecção de linha
+#define THRESHOLD_RIGHT 120
 
 #define BASE_SPEED 45 // Velocidade base
 #define CORRECTION 35 //
@@ -125,72 +125,62 @@ void loop() {
   currT = micros();
   deltaT = ((float) (currT - lastTime))/1.0e6;
 
-  float distance = readUltrassonic();
 
-  if (distance <= DIST && distance > 0) {
+  // Sensores IR de teste
+  int sE = readLine(IR_E); //Sensor esquerdo
+  int sC = readLine(IR_C); //Sensor centro
+  int sD = readLine(IR_D); //Sensor direito
+
+  // Linha no centro → segue reto
+  if (sC == HIGH && sE == LOW && sD == LOW) {
+    calculateSpeedEFE(30);
+    calculateSpeedEFD(-30);
+    calculateSpeedETD(-30);
+    calculateSpeedETE(30);
+  }
+  // Linha puxando para esquerda → corrige esquerda
+  else if (sE == HIGH && sC == LOW && sD == LOW) {
+    calculateSpeedEFE(-70);
+    calculateSpeedEFD(-70);
+    calculateSpeedETD(70);
+    calculateSpeedETE(70);
+  }
+  // Linha puxando para direita → corrige direita
+  else if (sD == HIGH && sC == LOW && sE == LOW) {
+    calculateSpeedEFE(70);
+    calculateSpeedEFD(70);
+    calculateSpeedETD(-70);
+    calculateSpeedETE(-70);
+  }
+  // Centro + lado → curva suave
+  else if (sE == HIGH && sC == HIGH && sD == LOW) {
+    calculateSpeedEFE(-70);
+    calculateSpeedEFD(-70);
+    calculateSpeedETD(-70);
+    calculateSpeedETE(-70);
+
+  }
+  else if (sD == HIGH && sC == HIGH && sE == LOW) {
+    calculateSpeedEFE(70);
+    calculateSpeedEFD(70);
+    calculateSpeedETD(70);
+    calculateSpeedETE(70);
+  }
+  // Linha perdida
+  else if (sE == LOW && sC == LOW && sD == LOW) {
     stop();
   }
-  else {
-    // Sensores IR de teste
-    int sE = readLine(IR_E); //Sensor esquerdo
-    int sC = readLine(IR_C); //Sensor centro
-    int sD = readLine(IR_D); //Sensor direito
 
-    // Linha no centro → segue reto
-    if (sC == HIGH && sE == LOW && sD == LOW) {
-      calculateSpeedEFE(50);
-      calculateSpeedEFD(-50);
-      calculateSpeedETD(-50);
-      calculateSpeedETE(50);
-    }
-    // Linha puxando para esquerda → corrige esquerda
-    else if (sE == HIGH && sC == LOW && sD == LOW) {
-      calculateSpeedEFE(-50);
-      calculateSpeedEFD(-50);
-      calculateSpeedETD(50);
-      calculateSpeedETE(50);
-    }
-    // Linha puxando para direita → corrige direita
-    else if (sD == HIGH && sC == LOW && sE == LOW) {
-      calculateSpeedEFE(50);
-      calculateSpeedEFD(50);
-      calculateSpeedETD(-50);
-      calculateSpeedETE(-50);
-    }
-    // Centro + lado → curva suave
-    else if (sE == HIGH && sC == HIGH && sD == LOW) {
-      calculateSpeedEFE(-50);
-      calculateSpeedEFD(-50);
-      calculateSpeedETD(-50);
-      calculateSpeedETE(-50);
-
-    }
-    else if (sD == HIGH && sC == HIGH && sE == LOW) {
-      calculateSpeedEFE(50);
-      calculateSpeedEFD(50);
-      calculateSpeedETD(50);
-      calculateSpeedETE(50);
-    }
-    // Linha perdida
-    else if (sE == LOW && sC == LOW && sD == LOW) {
-      stop();
-    }
-
-    Serial.print(distance);
-    Serial.println(" ");
-
-  }
-
-  lastTime = currT;
-  delay(20);
+lastTime = currT;
+delay(20);
 
 }
 
 int readLine(int pin) {
   int value = analogRead(pin);
 
-  if(pin == IR_C) {
-    if (value > THRESHOLD_CENTER) {
+  if(pin == IR_D) {
+    if (value > THRESHOLD_RIGHT) {
       return 1;   // linha amarela (preto)
     } else {
       return 0;   // fundo cinza (branco)
@@ -220,6 +210,13 @@ void setMotor(int dir1, int dir2, int pwm, int speed) {
     digitalWrite(dir2, LOW);
     analogWrite(pwm, 0);
   }
+}
+
+void moveBackward(int speed) {
+  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -speed);
+  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
+  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
+  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
 }
 
 void stop() {
