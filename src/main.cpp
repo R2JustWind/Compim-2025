@@ -62,11 +62,11 @@ float deltaT;
 long currT;
 
 int contador = 0;
+int distancia;
 
 int readLine(int pin);
 
 void setMotor(int dir1, int dir2, int pwm, int speed);
-void stop();
 void isrEFE();
 void isrEFD();
 void isrETE();
@@ -125,7 +125,6 @@ void loop() {
   currT = micros();
   deltaT = ((float) (currT - lastTime))/1.0e6;
 
-
   // Sensores IR de teste
   int sE = readLine(IR_E); //Sensor esquerdo
   int sC = readLine(IR_C); //Sensor centro
@@ -133,47 +132,91 @@ void loop() {
 
   // Linha no centro → segue reto
   if (sC == HIGH && sE == LOW && sD == LOW) {
-    calculateSpeedEFE(30);
-    calculateSpeedEFD(-30);
-    calculateSpeedETD(-30);
-    calculateSpeedETE(30);
+    calculateSpeedEFE(50);
+    calculateSpeedEFD(-50);
+    calculateSpeedETD(-50);
+    calculateSpeedETE(50);
   }
   // Linha puxando para esquerda → corrige esquerda
   else if (sE == HIGH && sC == LOW && sD == LOW) {
-    calculateSpeedEFE(-70);
-    calculateSpeedEFD(-70);
-    calculateSpeedETD(70);
-    calculateSpeedETE(70);
+    calculateSpeedEFE(-50);
+    calculateSpeedEFD(-50);
+    calculateSpeedETD(50);
+    calculateSpeedETE(50);
   }
   // Linha puxando para direita → corrige direita
   else if (sD == HIGH && sC == LOW && sE == LOW) {
-    calculateSpeedEFE(70);
-    calculateSpeedEFD(70);
-    calculateSpeedETD(-70);
-    calculateSpeedETE(-70);
+    calculateSpeedEFE(50);
+    calculateSpeedEFD(50);
+    calculateSpeedETD(-50);
+    calculateSpeedETE(-50);
   }
   // Centro + lado → curva suave
   else if (sE == HIGH && sC == HIGH && sD == LOW) {
-    calculateSpeedEFE(-70);
-    calculateSpeedEFD(-70);
-    calculateSpeedETD(-70);
-    calculateSpeedETE(-70);
+    calculateSpeedEFE(-50);
+    calculateSpeedEFD(-50);
+    calculateSpeedETD(-50);
+    calculateSpeedETE(-50);
 
   }
   else if (sD == HIGH && sC == HIGH && sE == LOW) {
-    calculateSpeedEFE(70);
-    calculateSpeedEFD(70);
-    calculateSpeedETD(70);
-    calculateSpeedETE(70);
+    calculateSpeedEFE(50);
+    calculateSpeedEFD(50);
+    calculateSpeedETD(50);
+    calculateSpeedETE(50);
   }
   // Linha perdida
   else if (sE == LOW && sC == LOW && sD == LOW) {
-    stop();
+    calculateSpeedEFE(0);
+    calculateSpeedEFD(0);
+    calculateSpeedETD(0);
+    calculateSpeedETE(0);
   }
 
-lastTime = currT;
-delay(20);
+  else if (sE == HIGH && sC == HIGH && sD == HIGH) {
+    calculateSpeedEFE(0);
+    calculateSpeedEFD(0);
+    calculateSpeedETD(0);
+    calculateSpeedETE(0);
+  }
 
+  //distancia = 100*(sin(currT/1e6));
+  distancia = readUltrassonic();
+    
+  while (distancia < 50 && distancia > 0) {
+    currT = micros();
+    deltaT = ((float) (currT - lastTime))/1.0e6;
+    
+    calculateSpeedEFE(0);
+    calculateSpeedEFD(0);
+    calculateSpeedETD(0);
+    calculateSpeedETE(0);
+
+    Serial.print(distancia);
+    Serial.print(' ');
+    Serial.print(sE);
+    Serial.print(' ');
+    Serial.print(sC);
+    Serial.print(' ');
+    Serial.print(sD);
+    Serial.println(' ');
+
+    distancia = readUltrassonic();
+    lastTime = currT;
+    delay(20);
+  }
+
+  Serial.print(distancia);
+  Serial.print(' ');
+  Serial.print(sE);
+  Serial.print(' ');
+  Serial.print(sC);
+  Serial.print(' ');
+  Serial.print(sD);
+  Serial.println(' ');
+
+  lastTime = currT;
+  delay(20);
 }
 
 int readLine(int pin) {
@@ -210,20 +253,6 @@ void setMotor(int dir1, int dir2, int pwm, int speed) {
     digitalWrite(dir2, LOW);
     analogWrite(pwm, 0);
   }
-}
-
-void moveBackward(int speed) {
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, -speed);
-  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, speed);
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, -speed);
-  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, speed);
-}
-
-void stop() {
-  setMotor(RFE_DIR1, RFE_DIR2, RFE_PWM, 0);
-  setMotor(RFD_DIR1, RFD_DIR2, RFD_PWM, 0);
-  setMotor(RTE_DIR1, RTE_DIR2, RTE_PWM, 0);
-  setMotor(RTD_DIR1, RTD_DIR2, RTD_PWM, 0);
 }
 
 void isrEFD() {
@@ -387,9 +416,9 @@ float readUltrassonic() {
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
 
-  long duration = pulseIn(ECHO, HIGH);
+  long duration = pulseIn(ECHO, HIGH, 10000);
 
-  float distance = duration * 0.034 / 2.0;
+  int distance = duration * 0.034 / 2.0;
 
   return distance;
 
