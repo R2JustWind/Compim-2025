@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Servo.h>
 #include <util/atomic.h>
 
 //DIR1 = INA  DIR2 = INB
@@ -36,9 +37,22 @@
 #define IR_C A1 // Centro
 #define IR_D A2 // Direito
 
+// Altura da garra
+#define GARRA_DIR1 49
+#define GARRA_DIR2 48
+#define GARRA_PWM 12
+#define EGARRA_A 20
+#define EGARRA_B 35
+
+// Servo da garra
+#define SERVO_PIN 44
+Servo garraServo;
+
 // Ultrassom
 #define TRIG 42
 #define ECHO 43
+#define TRIG2 46
+#define ECHO2 47
 
 #define DIST 15
 
@@ -49,6 +63,13 @@
 #define CORRECTION 35 //
 
 // THRESHOLD = (preto + branco) / 2;
+
+volatile int pulseCountGarra = 0;
+int primeiro_andar = 10000;
+int segundo_andar = 20000;
+int alvo = -30000;
+int altura = 0;
+int pulses_garra = 0;
 
 volatile long pulseCountEFD = 0, pulseCountEFE = 0, pulseCountETD = 0, pulseCountETE = 0;
 
@@ -68,7 +89,7 @@ int pulsosgiro = 0; //virar 90
 int temp = 0; //virar 90
 
 int index = 0; // posicao do index do vetor das tags
-int tags[6]; // lista das tags que serao passadas -> posicao0, cor0, posicao1.... (1=esquerda, 2=centro, 3=direita) (1=verde, 2=azul, 3=vermelho)
+int tags[3] = {0,0,0}; // lista das tags que serao passadas -> posicao0, cor0, posicao1.... (1=esquerda, 2=centro, 3=direita) (1=verde, 2=azul, 3=vermelho)
 
 int readLine(int pin);
 
@@ -82,9 +103,13 @@ float calculateSpeedETD(float vt);
 float calculateSpeedETE(float vt);
 float calculateSpeedEFE(float vt);
 float readUltrassonic();
+float readUltrassonicGarra();
 void tag1();
 void tag2();
-void tag3();
+int SobeGarra(int pulses);
+int DesceGarra(int pulses);
+void isrEGARRA();
+int movGarra(int pulses);
 
 void setup() {
   Serial.begin(9600);
@@ -114,6 +139,8 @@ void setup() {
   // Ultrassom
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
+  pinMode(ECHO2, INPUT);
+  pinMode(TRIG2, OUTPUT);
 
   pinMode(EFE_A, INPUT_PULLUP);
   pinMode(EFE_B, INPUT_PULLUP);
@@ -123,6 +150,18 @@ void setup() {
   pinMode(ETE_B, INPUT_PULLUP);
   pinMode(ETD_A, INPUT_PULLUP);
   pinMode(ETD_B, INPUT_PULLUP);
+
+  // Garra
+  pinMode(GARRA_DIR1, OUTPUT);
+  pinMode(GARRA_DIR2, OUTPUT);
+  pinMode(GARRA_PWM, OUTPUT);
+
+  pinMode(EGARRA_A, INPUT_PULLUP);
+  pinMode(EGARRA_B, INPUT_PULLUP);
+
+  garraServo.attach(SERVO_PIN);
+
+  attachInterrupt(digitalPinToInterrupt(EGARRA_A), isrEGARRA, RISING);
 
   attachInterrupt(digitalPinToInterrupt(EFE_A), isrEFE, RISING);
   attachInterrupt(digitalPinToInterrupt(EFD_A), isrEFD, RISING);
@@ -161,7 +200,7 @@ void loop() {
     calculateSpeedETE(-50);
   }
   // Centro + lado → curva suave
-  else if (sE == HIGH && sC == HIGH && sD == LOW) {
+  else if (sE == HIGH && sC == HIGH) {
     pulsosgiro = pulseCountETD;
     while (pulseCountETD - pulsosgiro > -400){
      currT = micros();
@@ -185,85 +224,185 @@ void loop() {
     temp = 1;
 
   }
-  else if (sD == HIGH && sC == HIGH && sE == LOW) {
-    pulsosgiro = pulseCountETD;
-    while (pulseCountETD - pulsosgiro > -425){
-     currT = micros();
-     deltaT = ((float)(currT - lastTime)) / 1.0e6;
-    calculateSpeedEFE(30);
-    calculateSpeedEFD(-30);
-    calculateSpeedETD(-30);
-    calculateSpeedETE(30);
-     lastTime = currT;
-    }
-    pulsosgiro = pulseCountETD;
-    while (pulseCountETD - pulsosgiro < 1000){
-     currT = micros();
-     deltaT = ((float)(currT - lastTime)) / 1.0e6;
-     calculateSpeedEFE(50);
-     calculateSpeedEFD(50);
-     calculateSpeedETD(50);
-     calculateSpeedETE(50);
-     lastTime = currT;
-    }
-    temp = 1;
-  }
-  // Linha perdida
-  else if (sE == LOW && sC == LOW && sD == LOW) {
-    calculateSpeedEFE(0);
-    calculateSpeedEFD(0);
-    calculateSpeedETD(0);
-    calculateSpeedETE(0);
-  }
-
-  else if (sE == HIGH && sC == HIGH && sD == HIGH) {
-    pulsosgiro = pulseCountETD;
-    while (pulseCountETD - pulsosgiro > -425){
-     currT = micros();
-     deltaT = ((float)(currT - lastTime)) / 1.0e6;
-    calculateSpeedEFE(30);
-    calculateSpeedEFD(-30);
-    calculateSpeedETD(-30);
-    calculateSpeedETE(30);
-     lastTime = currT;
-    }
-    pulsosgiro = pulseCountETD;
-    while (pulseCountETD - pulsosgiro < 1000){
-     currT = micros();
-     deltaT = ((float)(currT - lastTime)) / 1.0e6;
-     calculateSpeedEFE(50);
-     calculateSpeedEFD(50);
-     calculateSpeedETD(50);
-     calculateSpeedETE(50);
-     lastTime = currT;
-    }
-    temp = 1;
-  }
 
   //distancia = 100*(sin(currT/1e6));
   distancia = readUltrassonic();
     
-  while (distancia < 50 && distancia > 0) {
-    currT = micros();
-    deltaT = ((float) (currT - lastTime))/1.0e6;
+  if (distancia < 60 && distancia > 10) {
     
     calculateSpeedEFE(0);
     calculateSpeedEFD(0);
     calculateSpeedETD(0);
     calculateSpeedETE(0);
 
-    Serial.print(distancia);
-    Serial.print(' ');
-    Serial.print(sE);
-    Serial.print(' ');
-    Serial.print(sC);
-    Serial.print(' ');
-    Serial.print(sD);
-    Serial.println(' ');
+    movGarra(primeiro_andar);
 
-    distancia = readUltrassonic();
+    if (tags[0] == 0) {
+      // Função de ler as tags
+    }
+    int ignorar = tags[index] - 1;
+    pulsosgiro = pulseCountETD;
+    while (pulseCountETD - pulsosgiro > 200){
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+      calculateSpeedEFE(-30);
+      calculateSpeedEFD(-30);
+      calculateSpeedETD(30);
+      calculateSpeedETE(30);
+      lastTime = currT;
+    }
+    while(1) {
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+      calculateSpeedEFE(30);
+      calculateSpeedEFD(30);
+      calculateSpeedETD(-30);
+      calculateSpeedETE(-30);
+      lastTime = currT;
+      int distanciaGarra = readUltrassonicGarra();
+      if (distanciaGarra > 0 && distanciaGarra < 50) {
+        if(ignorar) {
+          ignorar--;
+          for (int i = 100; i > 0; i--) {
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(30);
+            calculateSpeedEFD(30);
+            calculateSpeedETD(-30);
+            calculateSpeedETE(-30);
+            lastTime = currT;
+          }
+        }else {
+          break;
+        }
+      }
+    }
+    pulsosgiro = pulseCountETD;
+    while(readUltrassonicGarra() > 6 || readUltrassonicGarra() == 0) {
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+      calculateSpeedEFE(30);
+      calculateSpeedEFD(-30);
+      calculateSpeedETD(-30);
+      calculateSpeedETE(30);
+      lastTime = currT;
+    }
+    int percorrido = pulsosgiro - pulseCountETD;
+    garraServo.write(80); // Descobrir o valor pra fechar o servo
+    delay(2000);
+    garraServo.write(90);
     lastTime = currT;
-    delay(20);
+    movGarra(segundo_andar);
+
+    pulsosgiro = pulseCountETD;
+    while (pulseCountETD - pulsosgiro < percorrido){
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+      calculateSpeedEFE(-30);
+      calculateSpeedEFD(30);
+      calculateSpeedETD(30);
+      calculateSpeedETE(-30);
+      lastTime = currT;
+    }
+    pulsosgiro = pulseCountETD;
+    while (pulseCountETD - pulsosgiro > -1800){ // ajustar para um giro 180
+     currT = micros();
+     deltaT = ((float)(currT - lastTime)) / 1.0e6;
+     calculateSpeedEFE(-50);
+     calculateSpeedEFD(-50);
+     calculateSpeedETD(-50);
+     calculateSpeedETE(-50);
+     lastTime = currT;
+    }
+    if(tags[index] == 1) {
+      sC = LOW;
+      while (sC != HIGH) {
+        currT = micros();
+        deltaT = ((float)(currT - lastTime)) / 1.0e6;
+        int sE = readLine(IR_E);
+        int sC = readLine(IR_C); 
+        int sD = readLine(IR_D); 
+
+        calculateSpeedEFE(-50);
+        calculateSpeedEFD(-50);
+        calculateSpeedETD(50);
+        calculateSpeedETE(50);
+
+        lastTime = currT;
+      }
+      tag1();
+      index++;
+    } else if(tags[index] == 2) {
+      sC = LOW;
+      pulsosgiro = pulseCountETD;
+      while (pulseCountEFD - pulsosgiro > 200) {
+        currT = micros();
+        deltaT = ((float)(currT - lastTime)) / 1.0e6;
+        calculateSpeedEFE(-50);
+        calculateSpeedEFD(-50);
+        calculateSpeedETD(50);
+        calculateSpeedETE(50);
+        lastTime = currT;
+
+        sE = readLine(IR_E);
+        sC = readLine(IR_C);
+        sD = readLine(IR_D);
+
+        if (sC == HIGH) {
+          calculateSpeedEFE(0);
+          calculateSpeedEFD(0);
+          calculateSpeedETD(0);
+          calculateSpeedETE(0);
+          break;
+        }
+      }
+      if(sC == LOW) {
+        pulsosgiro = pulseCountETD;
+        while (pulseCountEFD - pulsosgiro > -400) {
+          currT = micros();
+          deltaT = ((float)(currT - lastTime)) / 1.0e6;
+          calculateSpeedEFE(50);
+          calculateSpeedEFD(50);
+          calculateSpeedETD(-50);
+          calculateSpeedETE(-50);
+          lastTime = currT;
+
+          sE = readLine(IR_E);
+          sC = readLine(IR_C);
+          sD = readLine(IR_D);
+
+          if (sC == HIGH) {
+            calculateSpeedEFE(0);
+            calculateSpeedEFD(0);
+            calculateSpeedETD(0);
+            calculateSpeedETE(0);
+            break;
+          }
+        }
+      }
+      movGarra(primeiro_andar);
+      tag2();
+      index++;
+    } else if (tags[index] == 3) {
+      sC = LOW;
+      while (sC != HIGH) {
+        currT = micros();
+        deltaT = ((float)(currT - lastTime)) / 1.0e6;
+        int sE = readLine(IR_E);
+        int sC = readLine(IR_C); 
+        int sD = readLine(IR_D); 
+
+        calculateSpeedEFE(50);
+        calculateSpeedEFD(50);
+        calculateSpeedETD(-50);
+        calculateSpeedETE(-50);
+
+        lastTime = currT;
+      }
+      movGarra(segundo_andar);
+      tag2();
+      index++;
+    }
   }
 
   Serial.print(distancia);
@@ -484,6 +623,21 @@ float readUltrassonic() {
 
 }
 
+float readUltrassonicGarra() {
+  digitalWrite(TRIG2, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG2, LOW);
+
+  long duration = pulseIn(ECHO2, HIGH, 10000);
+
+  int distance = duration * 0.034 / 2.0;
+
+  return distance;
+}
+
 void tag1() {
     while (1) {
         currT = micros();
@@ -579,7 +733,7 @@ void tag1() {
 
 void tag2() {
     int ignorar = 1;
-    // Colocar a garra no primeiro andar 
+    // Colocar a garra no primeiro andar (Ou não, já tá no loop)
 
     while (1) {
         currT = micros();
@@ -650,7 +804,7 @@ void tag2() {
         }
         lastTime = currT;
     }
-    if(tags[index+1] == 1) {
+    if(tags[index] == 1) {
         while (pulseCountETD - pulsosgiro > 900){ // Descobrir o valor certo para alcançar o verde
             currT = micros();
             deltaT = ((float)(currT - lastTime)) / 1.0e6;
@@ -669,7 +823,10 @@ void tag2() {
             calculateSpeedETE(30);
             lastTime = currT;
         }
-        // Abrir a garra
+        garraServo.write(105);
+        delay(2000);
+        garraServo.write(90);
+        lastTime = currT;
         while (pulseCountETD - pulsosgiro > 200){ // Voltar o mesmo tanto que foi pra frente
             currT = micros();
             deltaT = ((float)(currT - lastTime)) / 1.0e6;
@@ -697,7 +854,198 @@ void tag2() {
             calculateSpeedETE(-50);
             lastTime = currT;
         }
-        return;
+      }else if(tags[index] == 2) {
+        while (pulseCountETD - pulsosgiro > -200){ // Descobrir o valor certo para ir para frente
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(30);
+            calculateSpeedEFD(-30);
+            calculateSpeedETD(-30);
+            calculateSpeedETE(30);
+            lastTime = currT;
+        }
+        garraServo.write(105);
+        delay(2000);
+        garraServo.write(90);
+        lastTime = currT;
+        while (pulseCountETD - pulsosgiro > 200){ // Voltar o mesmo tanto que foi pra frente
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(-30);
+            calculateSpeedEFD(30);
+            calculateSpeedETD(30);
+            calculateSpeedETE(-30);
+            lastTime = currT;
+        }
+        while (pulseCountETD - pulsosgiro < -2000){ // Colocar o valor certo para rotacionar 180 graus
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(-50);
+            calculateSpeedEFD(-50);
+            calculateSpeedETD(-50);
+            calculateSpeedETE(-50);
+            lastTime = currT;
+        }
+        
+    }
+    else if(tags[index] == 3) {
+        while (pulseCountETD - pulsosgiro > 900){ // Descobrir o valor certo para alcançar o azul
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(30);
+            calculateSpeedEFD(30);
+            calculateSpeedETD(-30);
+            calculateSpeedETE(-30);
+            lastTime = currT;
+        }
+        while (pulseCountETD - pulsosgiro > -200){ // Descobrir o valor certo para ir para frente
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(30);
+            calculateSpeedEFD(-30);
+            calculateSpeedETD(-30);
+            calculateSpeedETE(30);
+            lastTime = currT;
+        }
+        garraServo.write(105);
+        delay(2000);
+        garraServo.write(90);
+        lastTime = currT;
+        while (pulseCountETD - pulsosgiro > 200){ // Voltar o mesmo tanto que foi pra frente
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(-30);
+            calculateSpeedEFD(30);
+            calculateSpeedETD(30);
+            calculateSpeedETE(-30);
+            lastTime = currT;
+        }
+        while (pulseCountETD - pulsosgiro > -900){ // Corrigir para o centro
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(-30);
+            calculateSpeedEFD(-30);
+            calculateSpeedETD(30);
+            calculateSpeedETE(30);
+            lastTime = currT;
+        }
+        while (pulseCountETD - pulsosgiro < -2000){ // Colocar o valor certo para rotacionar 180 graus
+            currT = micros();
+            deltaT = ((float)(currT - lastTime)) / 1.0e6;
+            calculateSpeedEFE(-50);
+            calculateSpeedEFD(-50);
+            calculateSpeedETD(-50);
+            calculateSpeedETE(-50);
+            lastTime = currT;
+        }
+      }
+  return;
+}
+
+int SobeGarra(int pulses) {
+  digitalWrite(GARRA_DIR1, HIGH);
+  digitalWrite(GARRA_DIR2, LOW);
+  analogWrite(GARRA_PWM, 255);
+
+  volatile long count = 0;
+  while (count < pulses){
+    currT = micros();
+    deltaT = ((float)(currT - lastTime)) / 1.0e6;
+
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      count = pulseCountGarra;
     }
 
+    Serial.print(count);
+    Serial.println(' ');
+
+    lastTime = currT;
+  }
+
+  analogWrite(GARRA_PWM, 0);
+  pulses_garra = - count;
+  return count;
+}
+
+int DesceGarra(int pulses) {
+  digitalWrite(GARRA_DIR1, LOW);
+  digitalWrite(GARRA_DIR2, HIGH);
+  analogWrite(GARRA_PWM, 255);
+
+  volatile long count = pulseCountGarra;
+  while (count > pulses){
+    currT = micros();
+    deltaT = ((float)(currT - lastTime)) / 1.0e6;
+
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      count = pulseCountGarra;
+    }
+
+    Serial.print(count);
+    Serial.println(' ');
+
+    lastTime = currT;
+  }
+
+  analogWrite(GARRA_PWM, 0);
+  pulses_garra = - count;
+  return count;
+}
+
+void isrEGARRA() {
+  if(digitalRead(EGARRA_B) == HIGH) {
+    pulseCountGarra--;
+  } else {
+    pulseCountGarra++;
+  }
+}
+
+int movGarra(int pulses) {
+  if(pulses - pulseCountGarra > 0) {
+    digitalWrite(GARRA_DIR1, HIGH);
+    digitalWrite(GARRA_DIR2, LOW);
+    analogWrite(GARRA_PWM, 255);
+
+    volatile long count = 0;
+    while (count < pulses){
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        count = pulseCountGarra;
+      }
+
+      Serial.print(count);
+      Serial.println(' ');
+
+      lastTime = currT;
+    }
+
+    analogWrite(GARRA_PWM, 0);
+    pulses_garra = - count;
+    return count;
+  }else if (pulses - pulseCountGarra < 0) {
+    digitalWrite(GARRA_DIR1, LOW);
+    digitalWrite(GARRA_DIR2, HIGH);
+    analogWrite(GARRA_PWM, 255);
+
+    volatile long count = pulseCountGarra;
+    while (count > pulses){
+      currT = micros();
+      deltaT = ((float)(currT - lastTime)) / 1.0e6;
+
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        count = pulseCountGarra;
+      }
+
+      Serial.print(count);
+      Serial.println(' ');
+
+      lastTime = currT;
+    }
+
+    analogWrite(GARRA_PWM, 0);
+    pulses_garra = - count;
+    return count;
+  }
 }
